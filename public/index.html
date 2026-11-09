@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="GeoDEM Explorer: automatic DEM download, mosaic and crop for research areas.">
+<title>GeoDEM Explorer | Elevation Data Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<div class="workspace">
+<aside class="sidebar">
+  <header class="brand"><div class="brand-icon">◈</div><div><strong>GeoDEM <span>Explorer</span></strong><small>ELEVATION INTELLIGENCE PLATFORM</small></div><i class="version">BETA</i></header>
+  <div class="sidebar-scroll">
+    <div class="tag"><span class="pulse"></span> GEOSPATIAL WORKSPACE</div>
+    <h1>Elevate your<br><em>perspective.</em></h1>
+    <p class="intro">From any study area to analysis-ready terrain. Draw, choose and download.</p>
+    <section class="panel">
+      <div class="section-title"><b class="step">01</b><h2>Define study area</h2></div>
+      <label class="dropzone" id="dropzone"><input type="file" id="aoiFile" accept=".zip,.json,.geojson" hidden>
+        <span class="upload-symbol">⇧</span><strong>Drop your boundary file</strong><span>or <u>click to browse</u></span><small>Shapefile ZIP / GeoJSON</small>
+      </label>
+      <div class="or">OR SELECT ON MAP</div>
+      <div class="two-buttons"><button class="ghost" id="drawBtn">⬡ Draw polygon</button><button class="ghost" id="bboxBtn">▣ Draw rectangle</button></div>
+      <div class="selected" id="aoiInfo"><span class="status-dot"></span><span id="aoiText">No study area selected</span><button id="clearBtn" hidden title="Clear area">×</button></div>
+    </section>
+    <section class="panel">
+      <div class="section-title"><b class="step">02</b><h2>Available elevation data</h2><span class="multi">MULTI-SELECT</span></div>
+      <div id="datasetList"></div>
+      <p class="help">Native resolution is retained. Actual availability and surface/terrain type depend on the source.</p>
+    </section>
+    <section class="panel">
+      <div class="section-title"><b class="step">03</b><h2>DEM processing status</h2></div>
+      <div class="stats"><div><small>Products</small><strong id="selectedCount">0</strong></div><div><small>Area</small><strong id="areaStat">—</strong></div></div>
+      <button class="primary" id="runBtn" disabled>✦ Process elevation data <span>↗</span></button>
+      <p class="warning" id="keyWarning" hidden>Server API key not configured. Follow the README to enable downloads.</p>
+    </section>
+    <section class="panel" id="jobPanel" hidden>
+      <div class="section-title"><b class="step">04</b><h2>Progress & downloads</h2></div>
+      <div id="jobStatus" class="job-status">Preparing job…</div><div class="progress"><div id="progressBar"></div></div>
+      <div class="progress-text"><span id="jobMessage">—</span><strong id="progressLabel">0%</strong></div>
+      <div id="downloads"></div>
+    </section>
+  </div>
+  <footer class="footer">◉ POWERED BY OPENTOPOGRAPHY + GDAL <small>WGS 84 · GLOBAL</small></footer>
+</aside>
+<main class="map-wrap">
+  <div id="map"></div>
+  <div class="topbar">
+    <div class="map-title"><span class="live"></span> INTERACTIVE STUDY AREA MAP <small>DRAW OR UPLOAD YOUR BOUNDARY</small></div>
+    <form id="searchForm" class="search"><input id="locationInput" placeholder="Search city or location" aria-label="Search location"><button type="submit" title="Find location">⌕</button></form>
+    <div class="map-actions"><button id="indiaBtn">⌖ India</button><button id="worldBtn">◎ World</button></div>
+  </div>
+  <div class="bottom-left"><span class="swatch"></span> Study area selection <span class="sep"></span> WGS84 / EPSG:4326</div>
+  <div class="coordinates" id="coords">Move over map for coordinates</div>
+  <div class="toast" id="toast" hidden></div>
+</main>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/shpjs@6.1.0/dist/shp.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
