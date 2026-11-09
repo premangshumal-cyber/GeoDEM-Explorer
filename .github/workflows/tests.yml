@@ -1,0 +1,21 @@
+name: Python tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: geodem-explorer
+          environment-file: environment.yml
+          auto-activate-base: false
+      - run: python -m pytest -q
