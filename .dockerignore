@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+data
+*.zip
+*.tif
+*.tiff
+*.vrt
+__pycache__
+.pytest_cache
+.venv
