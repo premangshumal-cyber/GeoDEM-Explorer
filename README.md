@@ -39,3 +39,14 @@ Provider: https://opentopography.org/developers/
 Terms: https://opentopography.org/usageterms
 
 Attribution: This work is based on API services provided by the OpenTopography Facility with support from the National Science Foundation under NSF Award Numbers 2410799, 2410800 & 2410801.
+
+
+## Docker / Docker Compose
+
+This optional container workflow needs Docker Desktop. Make a local \`.env\` file by copying \`.env.example\`, and replace the placeholder with **your own key** (do not commit \`.env\`):
+
+    docker compose up --build
+
+Then browse to http://127.0.0.1:8000 . Compose binds the app to localhost for safer personal use and saves generated files to the local data folder. For a server deployment, configure OPENTOPOGRAPHY_API_KEY in the hosting provider's **private environment variables**; GitHub Actions secrets alone do not inject it into an independently hosted app. **Do not publish the current unauthenticated server to the Internet.**
+
+Latest checked CI builds are available in the GitHub Actions tab.
