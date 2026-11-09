@@ -1,58 +1,38 @@
-# External GDAL processing service
+# GeoDEM Explorer: FREE Render GDAL worker
 
-The [Vercel website](https://geodem-explorer.vercel.app/) is a static user interface. Its code is in `public/`. DEM processing lives in the **separate Python FastAPI + GDAL backend** in `app/`. It runs as a continuously available Docker service and must have adequate scratch disk space for elevation tiles.
+This repository's `render.yaml` now deploys a **free** Render Docker web service (512 MB memory, 0.1 CPU, no persistent disk). It implements the same five DEM sources but with much smaller limits. The Vercel frontend stays at https://geodem-explorer.vercel.app and continues to use no-key OpenStreetMap tiles.
+
+## Activate on Render
+
+1. In Render Dashboard, open **GeoDEM GDAL Backend** Blueprint and approve the planned free `geodem-gdal-backend` service.
+2. Set `OPENTOPOGRAPHY_API_KEY` privately in the Render environment. **Rotate the key previously pasted in chat first.** Never put it in GitHub or Vercel frontend code.
+3. The Blueprint creates a random `GEODEM_ACCESS_TOKEN`. Retrieve it from the service's private Environment settings and enter it into the web site's **Private processing access code** field. This is NOT the provider API key.
+4. Wait for Render's build to become Live, and check `https://<service>.onrender.com/api/health`.
+5. In Vercel project settings, set the non-secret `GEODEM_BACKEND_URL` to the Render HTTPS origin and redeploy, or paste the URL into the site's GDAL processing server field and press Connect.
+6. Test **one small polygon (under 100 km²)** and **one DEM**, preferably COP90. If successful, try other datasets and download a GeoTIFF or ZIP.
+
+## Free-tier constraints
+
+- Maximum AOI area: **100 km²** (geodesic area; geographic span also matters).
+- At most **4 intersecting 1° subsets per dataset** and **8 tile requests across all products** per job.
+- Maximum single fetched tile: 64 MiB.
+- One processing job at a time; one GDAL thread; limited RAM footprint.
+- Files are temporary and may disappear on service sleep/restart/redeploy; download immediately.
+- Render free services sleep after 15 minutes of idle and take time to wake; initial connection check may take over one minute.
+- This is a **personal testing tool**, not a public multi-user service. Requests still consume your own OpenTopography provider quota; do not share the processing access token.
+- There is no free persistent disk or durable job queue. Very large country/state AOIs are intentionally rejected.
 
 ## Architecture
 
-Browser (Vercel, free OpenStreetMap base map)
- -> HTTPS requests to GDAL service
- -> FastAPI validates AOI, bounds, selected DEMs, per-job access code
- -> OpenTopography Global DEM API (private key only on server)
- -> GDAL VRT mosaicking + cutline crop + compressed GeoTIFFs
- -> individual TIFF or ZIP downloads.
+Vercel frontend → private-code-gated HTTPS FastAPI on Render → OpenTopography API → GDAL mosaic → polygon clip → GeoTIFF/ZIP.
 
-The public website uses **no map key**; this is separate from OpenTopography's required **elevation download API key**. Keep both the provider key and processing access code on the backend only.
+The five dataset IDs are COP30, AW3D30, SRTMGL1, NASADEM and COP90. Coverage and data availability differ; not every source has valid elevations everywhere. The map background itself needs no API key.
 
-## Docker setup
+## For larger jobs later
 
-Use Docker Desktop locally or a Docker hosting service such as Railway, Render, Fly.io or a VM. The repository's `Dockerfile` creates an image with GDAL, Rasterio and FastAPI. On a host, configure:
+Move the existing Docker backend to a paid persistent worker with more memory/storage, a shared queue and object storage. Do not remove limits on Render's free 512-MB container.
 
-- `OPENTOPOGRAPHY_API_KEY`: rotate the key shared in chat and use the new private key
-- `GEODEM_ACCESS_TOKEN`: a separate, long, unpredictable secret that you type into the site's processing access-code field; **never reuse the provider key**
-- `GEODEM_CORS_ORIGINS`: `https://geodem-explorer.vercel.app` (include other intended frontends only)
-- `DATA_DIR`: a writable persistent directory, e.g. `/app/data`
-- `MAX_AREA_KM2`: max geodesic area for a request, default 300000
-- `MAX_TILES_PER_DATASET`: max number of intersecting 1° tile subsets, default 64
-- `JOB_WORKERS`: recommend 1 on small compute plans
-- `PORT`: platform-provided port, Docker defaults to 8000.
-
-Launch locally with a private `.env` (ignored by Git), for example:
-
-```sh
-docker compose up --build
-```
-
-Visit `http://localhost:8000/api/health` and `http://localhost:8000/api/config`. The first should report `{"status":"ok"}`, the second should report `key_configured:true` when a valid-looking key is configured (it does **not** test entitlement or the provider).
-
-## Deploy on Render
-
-A `render.yaml` blueprint is provided for a Docker web service with a persistent disk. **It uses a paid instance/storage configuration**, not an unconditional free tier. Connect this GitHub repo in Render, review costs and settings before accepting, then supply the private variables there. The initial build may be sizable because Conda installs GDAL.
-
-Once Render shows the service as live:
-1. Copy its HTTPS `*.onrender.com` URL.
-2. Enter it in **GDAL processing server** on the Vercel website and click **Connect**.
-3. Enter your private `GEODEM_ACCESS_TOKEN` into **Private processing access code**.
-4. Draw a reasonably small polygon and select COP90 for a first test. Click **Process elevation data**.
-5. Observe progress. Download the final ZIP or GeoTIFF.
-
-Alternatively, set the public backend *address only* as `GEODEM_BACKEND_URL` in **Vercel → GeoDEM Explorer → Settings → Environment Variables** and redeploy. The backend URL is not secret. This makes the Connect field populate automatically. Do **not** place either secret in Vercel's frontend variables.
-
-## Current limitations
-
-This is a **single-process, bounded research prototype**. The job registry is in memory and is lost on restart; output GeoTIFFs persist only while the attached backend storage persists. A container restart interrupts running downloads and users need to submit a new job. Jobs are not multi-node coordinated. Individual downloads are accessible via unpredictable job IDs (treat job URLs as private). File cleanup/retention limits, strong user accounts, billing controls, malware checks, durable queue, object storage, and automated retries remain necessary before opening the backend to arbitrary public users.
-
-Do **not** put `GEODEM_ACCESS_TOKEN` or `OPENTOPOGRAPHY_API_KEY` in source code, HTML, public JavaScript, a browser URL, screenshots or public logs. The site asks for the access code at runtime and holds it in browser memory only.
-
-OpenStreetMap tile hosting is community funded and intended for interactive map viewing; see https://operations.osmfoundation.org/policies/tiles/ for acceptable use. No map bulk-preloading is performed.
-
-Large national-scale 30 m DEMs may exceed provider quotas, available disk or the configured per-job limits. The application refuses such requests rather than pretending to finish them.
+Sources:
+- https://render.com/docs/free
+- https://render.com/docs/compute-plans
+- https://render.com/docs/blueprint-spec

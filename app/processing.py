@@ -35,7 +35,14 @@ def create_job(id,aoi,datasets):
         if len(tiles)>maximum:
             raise ValueError(f"{name} needs {len(tiles)} requests (limit {maximum}); select a smaller AOI")
         plans[name]={"aoi":clip,"tiles":tiles}
+    total_tiles=sum(len(item["tiles"]) for item in plans.values())
+    total_limit=int(os.getenv("MAX_TOTAL_TILE_REQUESTS","999"))
+    if total_tiles>total_limit:
+        raise ValueError(f"Request requires {total_tiles} tiles across datasets, exceeding the server limit of {total_limit}. Reduce products or AOI.")
     with LOCK:
+        busy=sum(1 for j in JOBS.values() if j["status"] in ("queued","running"))
+        if busy>=int(os.getenv("MAX_ACTIVE_JOBS","2")):
+            raise ValueError("The free DEM worker is busy. Try again when the current job finishes.")
         JOBS[id]={"id":id,"status":"queued","progress":0,"message":"Queued","datasets":datasets,
                   "files":[],"errors":[],"area_km2":round(approximate_area_km2(aoi),2),
                   "tiles_planned":{n:len(p["tiles"]) for n,p in plans.items()},
@@ -58,8 +65,8 @@ def fetch_tile(session,name,bbox,out,key):
                 for block in r.iter_content(chunk_size=1048576):
                     if block:
                         size+=len(block)
-                        if size>1500000000:
-                            raise RuntimeError("Tile exceeds 1.5 GB download limit")
+                        if size>int(os.getenv("MAX_TILE_MB","1500"))*1024*1024:
+                            raise RuntimeError("Raster tile exceeds server byte limit")
                         target.write(block)
         with rasterio.open(out) as src:
             if not src.count or not src.width or not src.height:
@@ -73,7 +80,7 @@ def fetch_tile(session,name,bbox,out,key):
 
 def run_gdal(args):
     try:
-        p=subprocess.run(args,capture_output=True,text=True,timeout=3600,check=False)
+        p=subprocess.run(args,capture_output=True,text=True,timeout=240,check=False)
     except FileNotFoundError:
         raise RuntimeError("GDAL commands unavailable; install environment.yml") from None
     if p.returncode:
@@ -101,7 +108,7 @@ def process_one(job_id,name,plan,root,session,key,done,total):
         out=root/(name+"_clipped.tif")
         run_gdal(["gdalwarp","-overwrite","-of","GTiff","-cutline",str(clip),"-crop_to_cutline",
                   "-dstnodata","-9999","-co","TILED=YES","-co","COMPRESS=DEFLATE",
-                  "-co","BIGTIFF=IF_SAFER","-wm","256","-multi","-wo","NUM_THREADS=2",str(vrt),str(out)])
+                  "-co","BIGTIFF=IF_SAFER","-wm","32","-wo","NUM_THREADS=1",str(vrt),str(out)])
         with rasterio.open(out) as src:
             info={"dataset":name,"filename":out.name,"size_bytes":out.stat().st_size,
                   "width":src.width,"height":src.height,"crs":str(src.crs),

@@ -48,6 +48,7 @@ def config():
     key=os.getenv("OPENTOPOGRAPHY_API_KEY","")
     return {"datasets":DATASETS,"key_configured":bool(key) and key!="YOUR_PERSONAL_API_KEY",
             "max_tiles":int(os.getenv("MAX_TILES_PER_DATASET","64")),
+            "max_total_tile_requests":int(os.getenv("MAX_TOTAL_TILE_REQUESTS","999")),
             "max_area_km2":float(os.getenv("MAX_AREA_KM2","300000")),
             "token_required":True}
 

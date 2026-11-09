@@ -1,7 +1,7 @@
 /* GeoDEM Explorer browser interface. The OpenTopography API key never enters this file. */
 const $ = id => document.getElementById(id);
 const state = {aoi:null, area:0, config:null, backendUrl:"", backendConfig:null,
-  chosen:new Set(["COP30","AW3D30","SRTMGL1","NASADEM","COP90"]), timer:null};
+  chosen:new Set(["COP30"]), timer:null};
 const fmt = new Intl.NumberFormat("en-IN",{maximumFractionDigits:1});
 const map = L.map("map",{zoomControl:false,worldCopyJump:true}).setView([22.5,80],5);
 L.control.zoom({position:"bottomright"}).addTo(map);
@@ -45,8 +45,8 @@ async function connectBackend(value, remember=true) {
   state.backendUrl="";
   try {
     const url=cleanBackendUrl(value.trim());
-    backendStatus("Checking GDAL server…");
-    const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),10000);
+    backendStatus("Checking GDAL server (a free worker can take over a minute to wake)…");
+    const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),90000);
     let response;
     try { response=await fetch(url+"/api/config",{signal:controller.signal,cache:"no-store"}); }
     finally { clearTimeout(timer); }
