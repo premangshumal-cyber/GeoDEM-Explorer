@@ -19,3 +19,5 @@ jobs:
           environment-file: environment.yml
           auto-activate-base: false
       - run: python -m pytest -q
+      - name: Check browser syntax
+        run: node --check public/static/app.js && node --check app/static/app.js && node --check api/runtime-config.js

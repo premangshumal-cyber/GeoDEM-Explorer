@@ -1,0 +1,29 @@
+# Optional, paid persistent GDAL backend. Review billing before deploying.
+services:
+  - type: web
+    name: geodem-gdal-backend
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    disk:
+      name: geodem-processing-data
+      mountPath: /app/data
+      sizeGB: 20
+    envVars:
+      - key: OPENTOPOGRAPHY_API_KEY
+        sync: false
+      - key: GEODEM_ACCESS_TOKEN
+        sync: false
+      - key: GEODEM_CORS_ORIGINS
+        value: https://geodem-explorer.vercel.app
+      - key: DATA_DIR
+        value: /app/data
+      - key: JOB_WORKERS
+        value: "1"
+      - key: MAX_TILES_PER_DATASET
+        value: "64"
+      - key: MAX_AREA_KM2
+        value: "300000"
