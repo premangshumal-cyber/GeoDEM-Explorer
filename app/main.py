@@ -4,7 +4,9 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import uuid
-from fastapi import FastAPI,UploadFile,File,HTTPException
+from fastapi import FastAPI,UploadFile,File,HTTPException,Header,Depends
+from fastapi.middleware.cors import CORSMiddleware
+import secrets
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel,Field
@@ -12,7 +14,21 @@ from .gis import DATASETS,read_aoi_geojson,read_shapefile_zip,approximate_area_k
 from .processing import DATA_DIR,create_job,get_job
 
 ROOT=Path(__file__).resolve().parent
-app=FastAPI(title="GeoDEM Explorer",version="1.0")
+app=FastAPI(title="GeoDEM Explorer",version="1.1")
+# Specific allowed origins; browser access control is NOT authentication.
+_ALLOWED_ORIGINS=[s.strip().rstrip("/") for s in os.getenv(
+    "GEODEM_CORS_ORIGINS","https://geodem-explorer.vercel.app,http://127.0.0.1:8000,http://localhost:8000"
+).split(",") if s.strip()]
+app.add_middleware(CORSMiddleware,allow_origins=_ALLOWED_ORIGINS,
+                   allow_methods=["GET","POST"],allow_headers=["Content-Type","X-GeoDEM-Access-Token"])
+
+def require_processing_access(x_geodem_access_token: str | None=Header(default=None)):
+    configured=os.getenv("GEODEM_ACCESS_TOKEN","")
+    if not configured or configured=="CHOOSE_A_LONG_RANDOM_ACCESS_TOKEN":
+        raise HTTPException(503,"Private processing access code is not configured on the server")
+    if not x_geodem_access_token or not secrets.compare_digest(x_geodem_access_token,configured):
+        raise HTTPException(401,"Invalid processing access code")
+
 app.mount("/static",StaticFiles(directory=str(ROOT/"static")),name="static")
 
 class JobRequest(BaseModel):
@@ -32,7 +48,8 @@ def config():
     key=os.getenv("OPENTOPOGRAPHY_API_KEY","")
     return {"datasets":DATASETS,"key_configured":bool(key) and key!="YOUR_PERSONAL_API_KEY",
             "max_tiles":int(os.getenv("MAX_TILES_PER_DATASET","64")),
-            "max_area_km2":float(os.getenv("MAX_AREA_KM2","300000"))}
+            "max_area_km2":float(os.getenv("MAX_AREA_KM2","300000")),
+            "token_required":True}
 
 @app.post("/api/aoi/upload")
 async def upload_aoi(file:UploadFile=File(...)):
@@ -58,7 +75,7 @@ async def upload_aoi(file:UploadFile=File(...)):
         raise HTTPException(422,str(e)) from None
 
 @app.post("/api/jobs")
-def submit(req:JobRequest):
+def submit(req:JobRequest, _:None=Depends(require_processing_access)):
     key=os.getenv("OPENTOPOGRAPHY_API_KEY","")
     if not key or key=="YOUR_PERSONAL_API_KEY":
         raise HTTPException(503,"Server API key not configured")

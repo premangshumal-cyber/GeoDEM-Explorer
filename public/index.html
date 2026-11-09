@@ -34,9 +34,16 @@
     </section>
     <section class="panel">
       <div class="section-title"><b class="step">03</b><h2>DEM processing status</h2></div>
+      <div class="backend-panel">
+        <label for="backendUrl">GDAL processing server (HTTPS)</label>
+        <div class="backend-controls"><input id="backendUrl" type="url" placeholder="https://your-gdal-backend.example" spellcheck="false" autocomplete="url"><button id="connectBtn" type="button">Connect</button></div>
+        <label for="accessToken">Private processing access code</label>
+        <input id="accessToken" type="password" placeholder="Access code from backend settings" autocomplete="off">
+        <div class="backend-status" id="backendStatus">Processing server not configured</div>
+      </div>
       <div class="stats"><div><small>Products</small><strong id="selectedCount">0</strong></div><div><small>Area</small><strong id="areaStat">—</strong></div></div>
       <button class="primary" id="runBtn" disabled>✦ Process elevation data <span>↗</span></button>
-      <p class="warning" id="keyWarning" hidden>Server API key not configured. Follow the README to enable downloads.</p>
+      <p class="warning" id="keyWarning" hidden>Connect a secured GDAL backend to enable DEM processing.</p>
     </section>
     <section class="panel" id="jobPanel" hidden>
       <div class="section-title"><b class="step">04</b><h2>Progress & downloads</h2></div>
