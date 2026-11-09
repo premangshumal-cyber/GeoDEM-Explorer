@@ -7,9 +7,12 @@ Interactive DEM download, tile mosaic, polygon clipping and GeoTIFF export for f
 1. Clone this repository using Git, then open **Anaconda Prompt** inside it.
 2. Run: conda env create -f environment.yml
 3. Run: conda activate geodem-explorer
-4. Set the server-only key in Anaconda Prompt: set OPENTOPOGRAPHY_API_KEY=YOUR_PERSONAL_KEY
-5. Start: python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-6. Visit http://127.0.0.1:8000 or API docs http://127.0.0.1:8000/docs
+4. Set the server-only key in Anaconda Prompt: set OPENTOPOGRAPHY_API_KEY=YOUR_ROTATED_PERSONAL_KEY
+5. Set a separate private processing access code: set GEODEM_ACCESS_TOKEN=YOUR_OWN_LONG_RANDOM_ACCESS_CODE
+6. Start: python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+7. Visit http://127.0.0.1:8000 or API docs http://127.0.0.1:8000/docs
+
+At the website, enter your processing access code in the private code field and connect to the local backend. **The code must differ from the OpenTopography provider key.**
 
 Do not put a personal API key in GitHub source, JavaScript, or a public web page. It must be in the server environment. The GitHub repository is code storage, not a running server. To deploy publicly, first obtain an approved OpenTopography integration/enterprise arrangement and add authentication, quotas, persistent jobs, object storage and cleanup.
 
@@ -50,3 +53,9 @@ This optional container workflow needs Docker Desktop. Make a local \`.env\` fil
 Then browse to http://127.0.0.1:8000 . Compose binds the app to localhost for safer personal use and saves generated files to the local data folder. For a server deployment, configure OPENTOPOGRAPHY_API_KEY in the hosting provider's **private environment variables**; GitHub Actions secrets alone do not inject it into an independently hosted app. **Do not publish the current unauthenticated server to the Internet.**
 
 Latest checked CI builds are available in the GitHub Actions tab.
+
+## Public Vercel website + separate GDAL server
+
+The website at https://geodem-explorer.vercel.app/ now uses **no-key OpenStreetMap map tiles**, not the CARTO basemap. It also has a backend address field, a private processing access-code field, CORS handling and a server-readiness check. A background DEM job can be submitted once the **separate Docker GDAL backend is deployed**. The Vercel frontend alone cannot run large GDAL mosaics. See [DEPLOY_BACKEND.md](DEPLOY_BACKEND.md) for Docker and paid persistent Render configuration. The backend is not automatically hosted by the Vercel frontend. Set `GEODEM_BACKEND_URL` as a Vercel environment variable to prefill its publicly accessible HTTPS address; **never** set the OpenTopography key or access code on the frontend.
+
+OpenStreetMap standard raster tiles are community-run and intended for normal interactive map viewing only. Respect https://operations.osmfoundation.org/policies/tiles/ .
