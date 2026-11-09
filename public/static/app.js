@@ -1,15 +1,72 @@
 /* GeoDEM Explorer browser interface. The OpenTopography API key never enters this file. */
 const $ = id => document.getElementById(id);
-const state = {aoi:null, area:0, config:null, chosen:new Set(["COP30","AW3D30","SRTMGL1","NASADEM","COP90"]), timer:null};
+const state = {aoi:null, area:0, config:null, backendUrl:"", backendConfig:null,
+  chosen:new Set(["COP30","AW3D30","SRTMGL1","NASADEM","COP90"]), timer:null};
 const fmt = new Intl.NumberFormat("en-IN",{maximumFractionDigits:1});
 const map = L.map("map",{zoomControl:false,worldCopyJump:true}).setView([22.5,80],5);
 L.control.zoom({position:"bottomright"}).addTo(map);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap contributors &copy; CARTO"}).addTo(map);
+// No map API key required. Interactive use only; respect OSM tile policy and attribution.
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+}).addTo(map);
 const areaLayer = new L.FeatureGroup().addTo(map);
 const drawing = new L.Control.Draw({draw:{polyline:false,polygon:{allowIntersection:false,showArea:true,shapeOptions:{color:"#a9dc64"}},rectangle:{shapeOptions:{color:"#a9dc64"}},circle:false,circlemarker:false,marker:false},edit:{featureGroup:areaLayer}});
 map.addControl(drawing);
 function toast(message) {const e=$("toast"); e.textContent=message; e.hidden=false; clearTimeout(window.toastTimeout); window.toastTimeout=setTimeout(()=>e.hidden=true,6500);}
-function updateRun() {$("selectedCount").textContent=state.chosen.size; $("areaStat").textContent=state.aoi?fmt.format(state.area)+" km²":"—"; $("runBtn").disabled=true;}
+function updateRun() {
+  $("selectedCount").textContent=state.chosen.size;
+  $("areaStat").textContent=state.aoi?fmt.format(state.area)+" km²":"—";
+  const connected=!!state.backendConfig?.key_configured;
+  const withinLimit=!state.aoi || state.area<=Number(state.backendConfig?.max_area_km2||300000);
+  const code=$("accessToken").value.trim();
+  $("runBtn").disabled=!state.aoi||!state.chosen.size||!connected||!code||!withinLimit;
+  const warning=$("keyWarning"); warning.hidden=false;
+  if(!state.backendUrl) warning.textContent="A separate GDAL server has not been deployed. The map works without a key; DEM downloads require the backend.";
+  else if(!state.backendConfig) warning.textContent="Backend is not reachable. Check the HTTPS URL and CORS settings.";
+  else if(!state.backendConfig.key_configured) warning.textContent="OpenTopography key is not configured on the GDAL backend.";
+  else if(!withinLimit) warning.textContent="Selected area exceeds backend limit ("+fmt.format(state.backendConfig.max_area_km2)+" km²). Choose a smaller area.";
+  else if(!code) warning.textContent="Enter your private processing access code to enable downloads.";
+  else warning.hidden=true;
+}
+function backendStatus(message, cls="") {
+  $("backendStatus").className="backend-status "+cls;
+  $("backendStatus").textContent=message;
+}
+function cleanBackendUrl(value) {
+  const parsed=new URL(value);
+  if (!["https:","http:"].includes(parsed.protocol)) throw Error("Expected an HTTPS backend URL");
+  if (location.protocol==="https:" && parsed.protocol!=="https:")
+    throw Error("The public website requires an HTTPS backend URL");
+  if (parsed.username||parsed.password||parsed.search||parsed.hash) throw Error("Only a server base URL is allowed");
+  return parsed.origin+parsed.pathname.replace(/\/+$/,"");
+}
+async function connectBackend(value, remember=true) {
+  state.backendConfig=null;
+  state.backendUrl="";
+  try {
+    const url=cleanBackendUrl(value.trim());
+    backendStatus("Checking GDAL server…");
+    const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),10000);
+    let response;
+    try { response=await fetch(url+"/api/config",{signal:controller.signal,cache:"no-store"}); }
+    finally { clearTimeout(timer); }
+    if(!response.ok) throw Error("Backend returned HTTP "+response.status);
+    const config=await response.json();
+    if (!config.datasets||!Object.hasOwn(config.datasets,"COP30")) throw Error("Not a GeoDEM backend");
+    state.backendUrl=url;state.backendConfig=config;
+    if(remember) localStorage.setItem("geodemBackendUrl",url);
+    $("backendUrl").value=url;
+    backendStatus(config.key_configured?"GDAL backend connected · provider key detected":"GDAL backend connected · provider key missing",
+      config.key_configured?"connected":"error");
+  } catch(error) {
+    backendStatus("Connection failed: "+error.message,"error");
+    if(remember)localStorage.removeItem("geodemBackendUrl");
+  }
+  updateRun();
+}
+$("connectBtn").onclick=()=>connectBackend($("backendUrl").value);
+$("accessToken").oninput=updateRun;
+
 function selectAOI(feature) {
   state.aoi=feature; state.area=Number(feature.area_km2||0);
   areaLayer.clearLayers(); const layer=L.geoJSON(feature,{style:{color:"#7eaf37",weight:3,fillColor:"#abdc63",fillOpacity:0.20}}).addTo(areaLayer);
@@ -36,7 +93,7 @@ async function upload(file) {
     if(features.some(f=>!["Polygon","MultiPolygon"].includes(f.geometry?.type)))throw Error("Select a polygon boundary");
     const area=window.turf?window.turf.area(merged)/1000000:0;
     selectAOI({...merged,area_km2:area});
-    toast("Study area loaded. DEM downloads require a separate processing server.");
+    toast("Study area loaded. You can now choose DEM datasets.");
   } catch(e){toast("Could not read boundary: "+e.message);}
 }
 $("aoiFile").addEventListener("change",e=>{if(e.target.files[0])upload(e.target.files[0]);});
@@ -74,7 +131,7 @@ function showDatasets() {
   });updateRun();
 }
 async function pollJob(id) {
-  try {const r=await fetch("/api/jobs/"+encodeURIComponent(id));const job=await r.json();if(!r.ok)throw Error(job.detail||"Job unavailable");
+  try {const r=await fetch(state.backendUrl+"/api/jobs/"+encodeURIComponent(id));const job=await r.json();if(!r.ok)throw Error(job.detail||"Job unavailable");
     $("jobStatus").textContent=job.status==="completed"?"✓ Download ready":job.status==="failed"?"✕ Processing failed":"● "+job.status.toUpperCase();
     $("progressBar").style.width=job.progress+"%";$("progressLabel").textContent=Math.round(job.progress)+"%";
     $("jobMessage").textContent=job.message;
@@ -82,7 +139,7 @@ async function pollJob(id) {
       clearInterval(state.timer);state.timer=null;updateRun();
       if(job.errors?.length)toast(job.errors.join(" | "));
       if(job.status==="completed") {
-        const target=$("downloads");target.replaceChildren();const root="/api/jobs/"+encodeURIComponent(id)+"/download/";
+        const target=$("downloads");target.replaceChildren();const root=state.backendUrl+"/api/jobs/"+encodeURIComponent(id)+"/download/";
         job.files.forEach(file=>{const a=document.createElement("a");a.className="download";a.href=root+encodeURIComponent(file.filename);
           a.textContent="↓ "+file.dataset+" · "+(file.size_bytes/1048576).toFixed(1)+" MB";target.append(a);});
         const all=document.createElement("a");all.className="download download-all";all.href=root+"GeoDEM_Explorer_outputs.zip";all.textContent="↓ Download all (ZIP)";target.append(all);
@@ -94,7 +151,9 @@ $("runBtn").onclick=async()=>{
   if(!state.aoi||!state.chosen.size)return;
   $("runBtn").disabled=true;$("jobPanel").hidden=false;$("downloads").replaceChildren();$("jobStatus").textContent="● SUBMITTING";
   $("progressBar").style.width="0%";$("progressLabel").textContent="0%";
-  try {const r=await fetch("/api/jobs",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({aoi:state.aoi,datasets:[...state.chosen]})});
+  try {const r=await fetch(state.backendUrl+"/api/jobs",{method:"POST",headers:{
+    "Content-Type":"application/json","X-GeoDEM-Access-Token":$("accessToken").value.trim()
+  },body:JSON.stringify({aoi:state.aoi,datasets:[...state.chosen]})});
     const data=await r.json();if(!r.ok)throw Error(data.detail||"Could not submit");
     if(state.timer)clearInterval(state.timer);state.timer=setInterval(()=>pollJob(data.id),2500);await pollJob(data.id);
   } catch(error){$("jobStatus").textContent="Could not start";$("jobMessage").textContent=error.message;toast(error.message);updateRun();}
@@ -107,6 +166,17 @@ state.config={key_configured:false,datasets:{
  "COP90":{name:"Copernicus GLO-90",description:"Digital Surface Model",resolution:"~90 m"}
 }};
 showDatasets();
-$("runBtn").textContent="Processing server not connected";
-$("keyWarning").hidden=false;
-$("keyWarning").textContent="This Vercel deployment supports map selection and uploads in your browser. DEM mosaicking and downloads require a separate GDAL backend; no downloads are performed here.";
+updateRun();
+// The backend endpoint is configured in Vercel's GEODEM_BACKEND_URL environment variable,
+// or can be entered manually without storing any secret in the site source.
+(async () => {
+  let configured="";
+  try {
+    const response=await fetch("/api/runtime-config",{cache:"no-store"});
+    if(response.ok){const data=await response.json();configured=data.backend_url||"";}
+  } catch (_) {}
+  const url=configured || localStorage.getItem("geodemBackendUrl") ||
+    (location.hostname==="localhost"||location.hostname==="127.0.0.1"?location.origin:"");
+  if (url) { $("backendUrl").value=url; await connectBackend(url,false); }
+  else { backendStatus("No processing server connected");updateRun(); }
+})();
