@@ -7,4 +7,4 @@ ENV PATH=/opt/conda/envs/geodem-explorer/bin:$PATH
 ENV DATA_DIR=/app/data
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
-CMD ["bash", "-lc", "exec uvicorn app.main:app --host 0.0.0.0 --port \${PORT:-8000}"]
+CMD ["bash", "-lc", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
